@@ -78,8 +78,7 @@ def analyze_sentiment_simple(message: str) -> str:
     Returns:
         str: POSITIVE, NEGATIVE, or NEUTRAL.
     """
-    message_clean = tokenize(message)
-    tokens = message_clean.split()
+    tokens = tokenize(message)
 
     if any(word in tokens for word in NEGATIVE_WORDS):
         return NEGATIVE
@@ -98,8 +97,8 @@ def analyze_sentiment(text: str) -> str:
     :rtype: str
     """
     try:
-        message_clean = tokenize(text)
-        blob = TextBlob(message_clean)
+        tokens = tokenize(text)
+        blob = TextBlob(" ".join(tokens))
         polarity = blob.sentiment.polarity
         if polarity < -0.1:
             return NEGATIVE
