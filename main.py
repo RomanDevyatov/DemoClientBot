@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict
 from textblob import TextBlob
+import string
 
 
 logging.basicConfig(
@@ -70,7 +71,6 @@ def classify_request(message: str) -> str:
 
     return REQUEST_INFO
 
-import string
 # --- Rule-Based Sentiment ---
 def analyze_sentiment_simple(message: str) -> str:
     """Perform simple sentiment analysis based on keyword matching.
