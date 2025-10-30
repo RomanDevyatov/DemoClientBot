@@ -1,3 +1,4 @@
+import os
 import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -16,9 +17,7 @@ COMPLAINT = "complaint_type"
 POSITIVE_FEEDBACK = "positive_feedback_type"
 REQUEST_INFO = "information_type"
 
-NEGATIVE = "Negative"
-POSITIVE = "Positive"
-NEUTRAL = "Neutral"
+NEGATIVE, POSITIVE, NEUTRAL = "NEGATIVE", "POSITIVE", "NEUTRAL"
 
 APOLOGIZE_MSG = "We apologize for the inconvenience. Our team is already working on a solution."
 POSITIVE_FEEDBACK_MSG = "Thank you for your feedback! We are very pleased that you are satisfied."
@@ -30,15 +29,22 @@ POSITIVE_WORDS = ["good", "excellent", "love", "satisfied", "thanks"]
 
 app = FastAPI(title="Customer Sentiment Orchestrator API")
 
-try:
-    sentiment_analyzer: Pipeline = pipeline(
-        "sentiment-analysis",
-        model="distilbert-base-uncased-finetuned-sst-2-english"
-    )
-    logger.info("Sentiment analysis model loaded successfully.")
-except Exception as e:
-    sentiment_analyzer = None
-    logger.error(f"Failed to load sentiment model: {e}")
+sentiment_analyzer: Pipeline = None
+
+def get_analyzer() -> Pipeline:
+    """Return a singleton sentiment analysis pipeline (lazy-loaded)."""
+    global sentiment_analyzer
+    if sentiment_analyzer is None:
+        try:
+            sentiment_analyzer = pipeline(
+                "sentiment-analysis",
+                model="distilbert-base-uncased-finetuned-sst-2-english"
+            )
+            logger.info("Sentiment model loaded successfully")
+        except Exception as e:
+            sentiment_analyzer = None
+            logger.error(f"Failed to load sentiment model: {e}")
+    return sentiment_analyzer
 
 class Request(BaseModel):
     """Schema for incoming user messages.
@@ -77,7 +83,7 @@ def classify_request(message: str) -> str:
 
     return REQUEST_INFO
 
-# --- Agent 2 (Option 1): Rule-Based Sentiment ---
+# --- Rule-Based Sentiment ---
 def analyze_sentiment_simple(message: str) -> str:
     """
     Perform simple sentiment analysis based on keyword matching.
@@ -93,9 +99,9 @@ def analyze_sentiment_simple(message: str) -> str:
         return POSITIVE
     return NEUTRAL
 
-# --- Agent 2 (Option 2): Transformer Sentiment Model ---
-def analyze_sentiment_three_class(text: str) -> str:
-    """Agent 2b — Performs transformer-based sentiment analysis (1–5 star model).
+# --- Agent 2: Transformer Sentiment Model ---
+def analyze_sentiment(text: str) -> str:
+    """Agent 2b — Performs sentiment analysis with lazy-loaded transformer model (1–5 star model).
     Falls back to simple keyword analysis if model is unavailable.
 
     :param text: message text to analyze
@@ -103,23 +109,21 @@ def analyze_sentiment_three_class(text: str) -> str:
     :return: sentiment label (POSITIVE, NEGATIVE, or NEUTRAL)
     :rtype: str
     """
-    if not sentiment_analyzer:
-        logger.warning("Sentiment model unavailable. Falling back to simple rules.")
-        return analyze_sentiment_simple(text)
-
     try:
-        result = sentiment_analyzer(text)[0]
-        label = result.get("label", "")
-        stars = int(label.split()[0]) if label and label[0].isdigit() else 3  # default neutral
+        analyzer = get_analyzer()
+        if analyzer is None:
+            logger.warning("No model available, using simple keyword-based sentiment")
+            return analyze_sentiment_simple(text)
 
-        if stars <= 2:
+        result = analyzer(text)[0] # [{'label': 'POSITIVE', 'score': 0.99}, ...]
+        label = result.get("label", "")
+        if NEGATIVE in label.upper():
             return NEGATIVE
-        elif stars == 3:
-            return NEUTRAL
-        else:
+        elif POSITIVE in label.upper():
             return POSITIVE
+        return NEUTRAL
     except Exception as e:
-        logger.error(f"Error during sentiment analysis: {e}")
+        logger.error(f"Sentiment analysis failed: {e}")
         return NEUTRAL
 
 # --- Agent 3: Response Generator ---
@@ -155,7 +159,7 @@ def process(req: Request) -> Dict[str, str]:
         logger.info(f"Processing message: {req.message}")
 
         classification = classify_request(req.message)
-        sentiment = analyze_sentiment_three_class(req.message)
+        sentiment = analyze_sentiment(req.message)
         response = generate_response(classification, sentiment)
 
         result = {
@@ -164,9 +168,14 @@ def process(req: Request) -> Dict[str, str]:
             "responseText": response
         }
 
-        logger.info(f"Result: {result}")
+        logger.info(f"Response generated: {result}")
         return result
 
     except Exception as e:
         logger.exception(f"Error in /process endpoint: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    from uvicorn import run
+    run("app:app", host="0.0.0.0", port=port)
