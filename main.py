@@ -2,9 +2,8 @@ import os
 import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from transformers import pipeline, Pipeline
 from typing import Dict
-
+from textblob import TextBlob
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,23 +27,6 @@ POSITIVE_WORDS = ["good", "excellent", "love", "satisfied", "thanks"]
 
 
 app = FastAPI(title="Customer Sentiment Orchestrator API")
-
-sentiment_analyzer: Pipeline = None
-
-def get_analyzer() -> Pipeline:
-    """Return a singleton sentiment analysis pipeline (lazy-loaded)."""
-    global sentiment_analyzer
-    if sentiment_analyzer is None:
-        try:
-            sentiment_analyzer = pipeline(
-                "sentiment-analysis",
-                model="distilbert-base-uncased-finetuned-sst-2-english"
-            )
-            logger.info("Sentiment model loaded successfully")
-        except Exception as e:
-            sentiment_analyzer = None
-            logger.error(f"Failed to load sentiment model: {e}")
-    return sentiment_analyzer
 
 class Request(BaseModel):
     """Schema for incoming user messages.
@@ -85,8 +67,7 @@ def classify_request(message: str) -> str:
 
 # --- Rule-Based Sentiment ---
 def analyze_sentiment_simple(message: str) -> str:
-    """
-    Perform simple sentiment analysis based on keyword matching.
+    """Perform simple sentiment analysis based on keyword matching.
 
     Returns:
         str: POSITIVE, NEGATIVE, or NEUTRAL.
@@ -110,18 +91,14 @@ def analyze_sentiment(text: str) -> str:
     :rtype: str
     """
     try:
-        analyzer = get_analyzer()
-        if analyzer is None:
-            logger.warning("No model available, using simple keyword-based sentiment")
-            return analyze_sentiment_simple(text)
-
-        result = analyzer(text)[0] # [{'label': 'POSITIVE', 'score': 0.99}, ...]
-        label = result.get("label", "")
-        if NEGATIVE in label.upper():
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity
+        if polarity < -0.1:
             return NEGATIVE
-        elif POSITIVE in label.upper():
+        elif polarity > 0.1:
             return POSITIVE
-        return NEUTRAL
+        else:
+            return NEUTRAL
     except Exception as e:
         logger.error(f"Sentiment analysis failed: {e}")
         return NEUTRAL

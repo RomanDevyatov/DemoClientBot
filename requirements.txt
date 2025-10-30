@@ -1,7 +1,4 @@
 fastapi~=0.120.2
 uvicorn[standard]
-openai
-hf_xet
-transformers~=4.57.1
-torch
+textblob
 pydantic~=2.12.3
