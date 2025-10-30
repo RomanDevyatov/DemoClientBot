@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Dict
 from textblob import TextBlob
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
@@ -36,6 +37,10 @@ class Request(BaseModel):
     """
     message: str
 
+def tokenize(text: str):
+    text_clean = text.lower().translate(str.maketrans("", "", string.punctuation))
+    return text_clean.split()
+
 # --- Agent 1 — Request Classification ---
 def classify_request(message: str) -> str:
     """Agent 1 — Classifies message into complaint, feedback, or info request.
@@ -45,26 +50,27 @@ def classify_request(message: str) -> str:
     :return: one of COMPLAINT, POSITIVE_FEEDBACK, or REQUEST_INFO
     :rtype: str
     """
-    message_lower = message.lower()
-
     complaint_keywords = [
         "complaint", "problem", "error", "issue", "fault", "bug",
-        "fail", "failure", "broken", "dissatisfied", "delay", "refund", "wrong"
+        "fail", "failure", "broken", "dissatisfied", "delay", "refund", "wrong",
+        "problematic", "unhappy", "issue", "mistake", "late", "poor",
     ]
 
     positive_keywords = [
         "thanks", "thank you", "good", "excellent", "love", "happy",
-        "satisfied", "great", "awesome", "appreciate", "pleased", "fantastic"
+        "satisfied", "great", "awesome", "appreciate", "pleased", "fantastic",
+        "nice", "well", "great job", "superb", "wonderful",
     ]
 
-    if any(word in message_lower for word in complaint_keywords):
+    tokens = tokenize(message)
+    if any(word in tokens for word in complaint_keywords):
         return COMPLAINT
-
-    if any(word in message_lower for word in positive_keywords):
+    if any(word in tokens for word in positive_keywords):
         return POSITIVE_FEEDBACK
 
     return REQUEST_INFO
 
+import string
 # --- Rule-Based Sentiment ---
 def analyze_sentiment_simple(message: str) -> str:
     """Perform simple sentiment analysis based on keyword matching.
@@ -72,11 +78,12 @@ def analyze_sentiment_simple(message: str) -> str:
     Returns:
         str: POSITIVE, NEGATIVE, or NEUTRAL.
     """
-    message_lower = message.lower()
+    message_clean = tokenize(message)
+    tokens = message_clean.split()
 
-    if any(word in message_lower for word in NEGATIVE_WORDS):
+    if any(word in tokens for word in NEGATIVE_WORDS):
         return NEGATIVE
-    elif any(word in message_lower for word in POSITIVE_WORDS):
+    if any(word in tokens for word in POSITIVE_WORDS):
         return POSITIVE
     return NEUTRAL
 
@@ -91,7 +98,8 @@ def analyze_sentiment(text: str) -> str:
     :rtype: str
     """
     try:
-        blob = TextBlob(text)
+        message_clean = tokenize(text)
+        blob = TextBlob(message_clean)
         polarity = blob.sentiment.polarity
         if polarity < -0.1:
             return NEGATIVE
