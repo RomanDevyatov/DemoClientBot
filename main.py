@@ -33,7 +33,7 @@ app = FastAPI(title="Customer Sentiment Orchestrator API")
 try:
     sentiment_analyzer: Pipeline = pipeline(
         "sentiment-analysis",
-        model="nlptown/bert-base-multilingual-uncased-sentiment"
+        model="distilbert-base-uncased-finetuned-sst-2-english"
     )
     logger.info("Sentiment analysis model loaded successfully.")
 except Exception as e:
